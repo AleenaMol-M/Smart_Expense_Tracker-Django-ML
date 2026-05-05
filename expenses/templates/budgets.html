@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Budgets</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .danger {
+            color: red;
+        }
+
+        a {
+            text-decoration: none;
+            background: #4CAF50;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+        }
+
+        .progress-container {
+            background: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 25px;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            text-align: center;
+            color: white;
+            line-height: 25px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- 💰 Budget Overview -->
+    <div class="card">
+        <h2>💰 Budget Overview</h2>
+
+        {% if budget %}
+            <p><strong>Budget:</strong> ₹{{ budget }}</p>
+            <p><strong>Spent:</strong> ₹{{ spent }}</p>
+
+            <!-- 🔥 Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-bar"
+                     style="
+                        width: {{ usage_percent }}%;
+                        background:
+                            {% if usage_percent > 100 %}
+                                red
+                            {% elif usage_percent > 80 %}
+                                orange
+                            {% else %}
+                                green
+                            {% endif %};
+                     ">
+                    {{ usage_percent|floatformat:1 }}%
+                </div>
+            </div>
+
+            <p style="margin-top:10px;">
+                <strong>Remaining:</strong>
+                {% if remaining < 0 %}
+                    <span class="danger">₹{{ remaining }}</span>
+                {% else %}
+                    ₹{{ remaining }}
+                {% endif %}
+            </p>
+
+            <p>
+                <strong>Daily Safe Limit:</strong>
+                {% if daily_limit %}
+                    ₹{{ daily_limit }}/day
+                {% else %}
+                    Not available
+                {% endif %}
+            </p>
+
+        {% else %}
+            <p>No budget set</p>
+        {% endif %}
+    </div>
+
+    <!-- ⚠️ Alerts -->
+    <div class="card">
+        <h3>⚠️ Alerts</h3>
+        <ul>
+            {% for msg in alerts %}
+                <li>{{ msg }}</li>
+            {% empty %}
+                <li>No alerts</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- 🔗 Actions -->
+    <div class="card">
+        <a href="{% url 'set_budget' %}">Set / Update Budget</a>
+    </div>
+
+</div>
+
+</body>
+</html>

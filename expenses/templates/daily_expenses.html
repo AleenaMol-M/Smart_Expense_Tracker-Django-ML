@@ -1,0 +1,12 @@
+<html>
+    <head><title>Daily expenses</title></head>
+    <body>
+        <h2>📅 Today’s Expenses</h2>
+
+{% for e in expenses %}
+    <p>{{ e.category }} - ₹{{ e.amount }}</p>
+{% empty %}
+    <p>No expenses today</p>
+{% endfor %}
+    </body>
+</html>

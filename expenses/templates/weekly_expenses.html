@@ -1,0 +1,20 @@
+<html>
+    <head>
+        <title>Weekly Expenses</title>
+    </head>
+    <body>
+        <h2>📆 Weekly Expenses</h2>
+
+{% for e in expenses %}
+    <p>{{ e.category }} - ₹{{ e.amount }} ({{ e.date }})</p>
+{% endfor %}
+
+<h3>🚨 Weekly Insight</h3>
+
+{% if weekly_anomaly %}
+    <p style="color:red;"><strong>{{ weekly_anomaly }}</strong></p>
+{% else %}
+    <p>No anomaly detected</p>
+{% endif %}
+    </body>
+</html>

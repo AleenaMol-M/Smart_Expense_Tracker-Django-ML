@@ -1,0 +1,12 @@
+<html>
+    <head><title>Set Budget</title></head>
+    <body>
+    <h2>Set Monthly Budget</h2>
+
+<form method="POST">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save Budget</button>
+</form>
+</body>
+</html>

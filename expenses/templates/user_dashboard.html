@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2, h3 {
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .nav a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 12px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+
+        .nav a:hover {
+            background-color: #45a049;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        .highlight {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .logout-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .section-title {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- Welcome -->
+    <div class="card">
+        <h2>Welcome, {{ request.user.username }} 👋</h2>
+    </div>
+
+    <!-- Navigation -->
+    <div class="card">
+        <h3 class="section-title">📂 Navigation</h3>
+        <div class="nav">
+            <a href="{% url 'expense_list' %}">All Expenses</a>
+            <a href="{% url 'daily_expenses' %}">Daily</a>
+            <a href="{% url 'weekly_expenses' %}">Weekly</a>
+            <a href="{% url 'monthly_expenses' %}">Monthly</a>
+            <a href="{% url 'budgets' %}">Budgets</a>
+        </div>
+    </div>
+
+    <!-- Prediction -->
+    <div class="card">
+        <h3 class="section-title">🔮 Predictions</h3>
+
+        <h4>Category-wise</h4>
+        <ul>
+            {% for cat, value in category_predictions.items %}
+                <li><strong>{{ cat }}</strong> → ₹{{ value }}</li>
+            {% empty %}
+                <li>No data available</li>
+            {% endfor %}
+        </ul>
+
+        <h4>Total Monthly Prediction</h4>
+        <p class="highlight">₹{{ total_prediction }}</p>
+        <p><small>Based on your past spending pattern</small></p>
+    </div>
+    <div class="card">
+    <h3>🚨 Anomaly Detection</h3>
+
+    {% if anomaly_message %}
+        <p style="color:red;"><strong>{{ anomaly_message }}</strong></p>
+    {% else %}
+        <p>No unusual spending detected</p>
+    {% endif %}
+</div>
+    <!-- Budget -->
+    <div class="card">
+        <h3 class="section-title">💰 Budget</h3>
+
+        {% if budget %}
+            <p>Your Budget: <strong>₹{{ budget }}</strong></p>
+        {% else %}
+            <p>No budget set</p>
+        {% endif %}
+
+        <a href="{% url 'set_budget' %}">Set / Update Budget</a>
+    </div>
+
+    <!-- Alerts -->
+    <div class="card">
+        <h3 class="section-title">⚠️ Alerts</h3>
+        <ul>
+            {% for msg in alerts %}
+                <li>{{ msg }}</li>
+            {% empty %}
+                <li>No alerts</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Logout -->
+    <div class="card">
+        <form method="POST" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="logout-btn">Logout</button>
+        </form>
+    </div>
+
+</div>
+
+</body>
+</html>

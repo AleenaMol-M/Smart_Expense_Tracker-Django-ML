@@ -1,0 +1,20 @@
+<html>
+    <head>
+        <title>Monthly Expenses</title>
+    </head>
+    <body>
+        <h2>📊 Monthly Expenses</h2>
+
+{% for e in expenses %}
+    <p>{{ e.category }} - ₹{{ e.amount }} ({{ e.date }})</p>
+{% endfor %}
+
+<h3>🚨 Monthly Insight</h3>
+
+{% if monthly_anomaly %}
+    <p style="color:red;"><strong>{{ monthly_anomaly }}</strong></p>
+{% else %}
+    <p>No anomaly detected</p>
+{% endif %}
+    </body>
+</html>
