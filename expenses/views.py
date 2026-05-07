@@ -2,14 +2,21 @@ from django.utils.timezone import now
 from datetime import timedelta
 from django.shortcuts import redirect, render, get_object_or_404
 from django.contrib.auth.forms import UserCreationForm
-from .forms import ExpenseForm,BudgetForm
-from .models import Expense,Budget
+from .forms import ExpenseForm,BudgetForm,ReceiptForm
+from .models import Expense,Budget,Receipt
 from django.db.models import Sum
 from django.contrib.auth.decorators import login_required
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 import calendar
 import numpy as np
+import cv2
+import re
+from PIL import Image
+from datetime import datetime
+import pytesseract
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # Create your views here.
 
 @login_required
@@ -241,15 +248,16 @@ def daily_expenses(request):
 @login_required
 def weekly_expenses(request):
     today = now().date()
-    week_ago = today - timedelta(days=7)
 
-    # 👉 Current week expenses (for display)
+    # ✅ FIX 1: Current WEEK (Monday → today)
+    start_of_week = today - timedelta(days=today.weekday())
+
     expenses = Expense.objects.filter(
         user=request.user,
-        date__range=[week_ago, today]
-    )
+        date__range=[start_of_week, today]
+    ).order_by('-date', '-id')  # latest first
 
-    # 👉 All expenses (for anomaly detection)
+    # 👉 All expenses for anomaly detection
     all_expenses = Expense.objects.filter(user=request.user)
 
     # 📊 Step 1: Group by (year, week)
@@ -264,52 +272,58 @@ def weekly_expenses(request):
 
     weekly_anomaly = None
 
-    # 📌 Step 2: Identify CURRENT week correctly
+    # 📌 Step 2: Current week key
     current_year, current_week_num, _ = today.isocalendar()
     current_key = (current_year, current_week_num)
 
     current_week_total = weekly_dict.get(current_key, 0)
 
-    # 📌 Step 3: Get ONLY past weeks (exclude current)
+    # 📌 Step 3: Past weeks only
     past_values = [
         total for key, total in weekly_dict.items()
         if key != current_key
     ]
-    # ✅ ADD DEBUG PRINT HERE
-    print("Current Week Total:", current_week_total)
-    print("Past Weeks Data:", past_values)
-    print("Number of Past Weeks:", len(past_values))
 
-    # 📌 Step 4: Apply anomaly logic
+    # 📌 Step 4: Apply anomaly logic (MEDIAN ✔)
     if len(past_values) >= 2:
-        avg = np.median(past_values)
+        median = np.median(past_values)
 
-        if current_week_total > avg * 1.2:
+        if current_week_total > median * 1.2:
             weekly_anomaly = (
                 f"⚠️ High spending this week "
-                f"(₹{current_week_total}, avg ₹{round(avg, 2)})"
+                f"(₹{current_week_total}, median ₹{round(median, 2)})"
             )
 
-        elif current_week_total < avg * 0.8:
+        elif current_week_total < median * 0.8:
             weekly_anomaly = (
                 f"📉 Low spending this week "
-                f"(₹{current_week_total}, avg ₹{round(avg, 2)})"
+                f"(₹{current_week_total}, median ₹{round(median, 2)})"
             )
+
+        else:
+            weekly_anomaly = (
+                f"✅ Normal spending this week "
+                f"(₹{current_week_total})"
+            )
+
+    # 📊 BONUS: weekly total for UI
+    weekly_total = sum(exp.amount for exp in expenses)
 
     return render(request, 'weekly_expenses.html', {
         'expenses': expenses,
-        'weekly_anomaly': weekly_anomaly
+        'weekly_anomaly': weekly_anomaly,
+        'weekly_total': weekly_total
     })
 @login_required
 def monthly_expenses(request):
     today = now().date()
 
-    # 👉 Current month expenses (for display)
+    # ✅ Current month expenses (latest first)
     expenses = Expense.objects.filter(
         user=request.user,
         date__month=today.month,
         date__year=today.year
-    )
+    ).order_by('-date', '-id')
 
     # 👉 All expenses (for anomaly detection)
     all_expenses = Expense.objects.filter(user=request.user)
@@ -319,52 +333,120 @@ def monthly_expenses(request):
 
     for exp in all_expenses:
         key = (exp.date.year, exp.date.month)
-
         monthly_dict.setdefault(key, 0)
         monthly_dict[key] += exp.amount
 
-    monthly_anomaly = None
-
-    # 📌 Step 2: Get current month correctly
+    # 📌 Step 2: Current month
     current_key = (today.year, today.month)
     current_month_total = monthly_dict.get(current_key, 0)
 
-    # 📌 Step 3: Get past months (exclude current)
+    # 📌 Step 3: Past months
     past_values = [
         total for key, total in monthly_dict.items()
         if key != current_key
     ]
 
-    # 📌 Step 4: Apply anomaly logic (MEDIAN based ✅)
-    if len(past_values) >= 1:
-        avg = np.median(past_values)
+    # 📌 Step 4: Median-based anomaly
+    monthly_anomaly = None
 
-        if current_month_total > avg * 1.2:
+    if len(past_values) >= 1:
+        median = np.median(past_values)
+
+        if current_month_total > median * 1.2:
             monthly_anomaly = (
                 f"⚠️ High spending this month "
-                f"(₹{current_month_total}, avg ₹{round(avg, 2)})"
+                f"(₹{current_month_total}, median ₹{round(median, 2)})"
             )
 
-        elif current_month_total < avg * 0.8:
+        elif current_month_total < median * 0.8:
             monthly_anomaly = (
                 f"📉 Low spending this month "
-                f"(₹{current_month_total}, avg ₹{round(avg, 2)})"
+                f"(₹{current_month_total}, median ₹{round(median, 2)})"
             )
 
         else:
             monthly_anomaly = (
-                f"✅ Normal spending "
-                f"(₹{current_month_total}, avg ₹{round(avg, 2)})"
+                f"✅ Normal spending this month (₹{current_month_total})"
             )
-
     else:
         monthly_anomaly = "Not enough data to analyze"
 
-    return render(request, 'monthly_expenses.html', {
-        'expenses': expenses,
-        'monthly_anomaly': monthly_anomaly
+    # ✅ Monthly total (for UI)
+    monthly_total = sum(exp.amount for exp in expenses)
+
+    # 🔥 Previous month calculation
+    first_day_this_month = today.replace(day=1)
+    last_day_prev_month = first_day_this_month - timedelta(days=1)
+
+    prev_month = last_day_prev_month.month
+    prev_year = last_day_prev_month.year
+
+    prev_expenses = Expense.objects.filter(
+        user=request.user,
+        date__month=prev_month,
+        date__year=prev_year
+    )
+
+    previous_month_total = sum(exp.amount for exp in prev_expenses)
+
+    # 📊 Comparison logic (IMPROVED UX)
+    comparison_message = None
+
+    if previous_month_total > 0:
+        difference = current_month_total - previous_month_total
+        percentage_change = (difference / previous_month_total) * 100
+
+        # 🔥 UX FIX: if previous month is too small
+        if previous_month_total < 1000:
+            if difference > 0:
+                comparison_message = (
+                    f"📈 You spent ₹{difference} more than last month"
+                )
+            elif difference < 0:
+                comparison_message = (
+                    f"📉 You spent ₹{abs(difference)} less than last month"
+                )
+            else:
+                comparison_message = "😐 Spending is same as last month"
+
+        else:
+            if difference > 0:
+                comparison_message = (
+                    f"📈 You spent ₹{difference} more "
+                    f"({round(percentage_change,1)}%) than last month"
+                )
+            elif difference < 0:
+                comparison_message = (
+                    f"📉 You spent ₹{abs(difference)} less "
+                    f"({abs(round(percentage_change,1))}%) than last month"
+                )
+            else:
+                comparison_message = "😐 Spending is same as last month"
+
+    else:
+        comparison_message = "No data for previous month"
+
+      # 📈 Monthly trend data
+    trend_data = []
+
+    sorted_months = sorted(monthly_dict.keys())
+
+    for year, month in sorted_months:
+        label = f"{calendar.month_abbr[month]} {year}"
+        total = monthly_dict[(year, month)]
+
+        trend_data.append({
+        'month': label,
+        'total': total
     })
 
+    return render(request, 'monthly_expenses.html', {
+        'expenses': expenses,
+        'monthly_anomaly': monthly_anomaly,
+        'monthly_total': monthly_total,
+        'previous_month_total': previous_month_total,
+        'comparison_message': comparison_message,'trend_data': trend_data
+    })
 @login_required
 def set_budget(request):
     from django.utils.timezone import now
@@ -451,3 +533,232 @@ def budgets(request):
     'alerts': alerts,
     'usage_percent': usage_percent
 })
+#OCR core
+def extract_text(image_path):
+    img=cv2.imread(image_path)
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+    text=pytesseract.image_to_string(gray)
+    return text
+
+import re
+
+def extract_amount(text):
+
+    # 🔥 Important keywords
+    keywords = [
+        'Payable',
+        'Bill Amount',
+        'Total',
+        'Amount'
+    ]
+
+    for keyword in keywords:
+
+        # flexible pattern
+        pattern = rf'{keyword}\s*[:=\-]?\s*(\d+\s*\.?\s*\d*)'
+
+        match = re.search(pattern, text, re.IGNORECASE)
+
+        if match:
+
+            amount = match.group(1)
+
+            # remove spaces
+            amount = amount.replace(" ", "")
+
+            try:
+                return float(amount)
+            except:
+                pass
+
+    return None
+import re
+
+def extract_date(text):
+
+    # ✅ Try Bill Date first
+    bill_match = re.search(
+        r'Bill\s*Date\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})',
+        text,
+        re.IGNORECASE
+    )
+
+    if bill_match:
+        return bill_match.group(1)
+
+    # ✅ Try Due Date
+    due_match = re.search(
+        r'Due\s*Date\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})',
+        text,
+        re.IGNORECASE
+    )
+
+    if due_match:
+        return due_match.group(1)
+
+    # ✅ Fallback: first normal date
+    dates = re.findall(r'\d{2}/\d{2}/\d{4}', text)
+
+    if dates:
+        return dates[0]
+
+    return None
+##.........................................#
+
+def extract_bill_date(text):
+
+    match = re.search(
+        r'Bill\s*Date\s*[:=\-]?\s*(\d{2}/\d{2}/\d{4})',
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+        return match.group(1)
+
+    return None
+
+def extract_due_date(text):
+
+    match = re.search(
+        r'Due\s*Date\s*[:=\-]?\s*(\d{2}/\d{2}/\d{4})',
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+        return match.group(1)
+
+    return None
+
+def extract_category(text):
+
+    text = text.lower()
+
+    # 🔥 Bills
+    if 'kseb' in text or 'electricity' in text or 'bill' in text:
+        return 'Bills'
+
+    # 🍔 Food
+    elif 'swiggy' in text or 'zomato' in text or 'restaurant' in text:
+        return 'Food'
+
+    # 🚕 Travel
+    elif 'uber' in text or 'ola' in text or 'bus' in text or 'train' in text:
+        return 'Travel'
+
+    # 🛒 Shopping
+    elif 'amazon' in text or 'flipkart' in text or 'shopping' in text:
+        return 'Shopping'
+
+    # ❓ Default
+    return 'Others'
+
+def extract_description(text):
+
+    text_lower = text.lower()
+
+    if 'kseb' or 'electricity' in text_lower:
+        return 'KSEB Electricity Bill'
+
+    elif 'swiggy' in text_lower:
+        return 'Swiggy Food Order'
+
+    elif 'zomato' in text_lower:
+        return 'Zomato Food Order'
+
+    elif 'uber' or 'travel' in text_lower:
+        return 'Uber Ride'
+
+    elif 'amazon' in text_lower:
+        return 'Amazon Shopping'
+
+    return 'Scanned Receipt'
+
+@login_required
+def scan_receipt(request):
+
+    extracted_data = None
+
+    if request.method == 'POST':
+
+        form = ReceiptForm(request.POST, request.FILES)
+
+        if form.is_valid():
+
+            receipt = form.save(commit=False)
+            receipt.user = request.user
+            receipt.save()
+
+            image_path = receipt.image.path
+
+            # 🔍 OCR TEXT
+            text = extract_text(image_path)
+            print(text)
+            # 💰 Extract amount
+            amount = extract_amount(text)
+          
+            category = extract_category(text)
+
+            description = extract_description(text)
+            # 📅 Extract bill date
+            bill_date = extract_bill_date(text)
+
+            # 📅 Extract due date
+            due_date = extract_due_date(text)
+
+            # ✅ Convert bill date
+            if bill_date:
+                try:
+                    bill_date = datetime.strptime(
+                        bill_date,
+                        "%d/%m/%Y"
+                    ).date()
+                except:
+                    bill_date = None
+
+            # ✅ Convert due date
+            if due_date:
+                try:
+                    due_date = datetime.strptime(
+                        due_date,
+                        "%d/%m/%Y"
+                    ).date()
+                except:
+                    due_date = None
+
+            # ✅ Save expense
+            if amount:
+
+                Expense.objects.create(
+                    user=request.user,
+                    amount=amount,
+                    category=category,
+                    description=description,
+
+                    # actual payment date
+                    date=now().date(),
+
+                    # bill info
+                    bill_date=bill_date,
+                    due_date=due_date
+                )
+
+            extracted_data = {
+                'text': text,
+                'amount': amount,
+                'category': category,
+                'description':description,
+                'bill_date': bill_date,
+                'due_date': due_date,
+                'image_url': receipt.image.url,
+            }
+
+    else:
+        form = ReceiptForm()
+
+    return render(request, 'scan_receipt.html', {
+        'form': form,
+        'data': extracted_data
+    })

@@ -1,5 +1,5 @@
 from django import forms
-from .models import Expense,Budget
+from .models import Expense,Budget,Receipt
 
 class ExpenseForm(forms.ModelForm):
     class Meta:
@@ -13,5 +13,10 @@ class BudgetForm(forms.ModelForm):
     class Meta:
         model = Budget
         fields = ['amount']
+
+class ReceiptForm(forms.ModelForm):
+    class Meta:
+        model=Receipt
+        fields=['image']
 
         

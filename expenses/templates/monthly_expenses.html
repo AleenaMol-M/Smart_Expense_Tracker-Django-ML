@@ -16,5 +16,48 @@
 {% else %}
     <p>No anomaly detected</p>
 {% endif %}
+
+<h3>📊 Monthly Summary</h3>
+
+<p><strong>This Month:</strong> ₹{{ monthly_total }}</p>
+<p><strong>Last Month:</strong> ₹{{ previous_month_total }}</p>
+
+<p style="
+    color:
+    {% if 'more' in comparison_message %}red
+    {% elif 'less' in comparison_message %}green
+    {% else %}black
+    {% endif %}
+">
+    {{ comparison_message }}
+</p>
+
+<h3>📈 Monthly Trend</h3>
+
+<div style="width:600px;">
+    <canvas id="trendChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const trendData = {{ trend_data|safe }};
+
+    const labels = trendData.map(item => item.month);
+    const values = trendData.map(item => item.total);
+
+    const ctx = document.getElementById('trendChart');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Monthly Spending',
+                data: values
+            }]
+        }
+    });
+</script>
     </body>
 </html>

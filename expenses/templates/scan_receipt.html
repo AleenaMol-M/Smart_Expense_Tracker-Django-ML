@@ -1,0 +1,36 @@
+<html>
+    <head><title>Scan Receipt</title></head>
+    <body>
+        <h2>📷 Scan Receipt</h2>
+
+<form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Upload & Scan</button>
+</form>
+{% if data.image_url %}
+
+<h3>📸 Uploaded Receipt</h3>
+
+<img 
+    src="{{ data.image_url }}" 
+    width="300"
+    style="border-radius:10px;"
+>
+
+{% endif %}
+
+{% if data %}
+    <h3>🧾 Extracted Data</h3>
+    <p><strong>Category:</strong> {{ data.category }}</p>
+    <p><strong>Amount:</strong> ₹{{ data.amount|floatformat:2 }}</p>
+    <p><strong>Description:</strong> {{ data.description }}</p>
+    {% if data.bill_date %}
+    <p><strong>Bill Date:</strong>{{ data.bill_date|date:"d/m/Y" }}</p>
+    {% endif %}
+    {% if data.due_date %}
+    <p><strong>Due Date:</strong>{{ data.due_date|date:"d/m/Y" }}</p>
+    {% endif %}
+{% endif %}
+    </body>
+</html>

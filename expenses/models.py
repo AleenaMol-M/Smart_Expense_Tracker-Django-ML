@@ -13,7 +13,12 @@ class Expense(models.Model):
     user=models.ForeignKey(User,on_delete=models.CASCADE)
     amount=models.FloatField()
     category=models.CharField(max_length=20,choices=category_choices)
-    date=models.DateField(default=now)
+    # ✅ Main expense/payment date
+    date = models.DateField(default=now)
+
+    # ✅ OCR bill details
+    bill_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
     description=models.TextField(blank=True)
     
 
@@ -25,6 +30,14 @@ class Budget(models.Model):
     amount = models.FloatField()
     month = models.IntegerField()
     year = models.IntegerField()
+    
 
     def __str__(self):
         return f"{self.user.username} - {self.month}/{self.year}"
+    
+
+class Receipt(models.Model):
+    user=models.ForeignKey(User,on_delete=models.CASCADE)
+    image=models.ImageField(upload_to='receipts/')
+    uploaded_at=models.DateTimeField(auto_now_add=True)
+    
