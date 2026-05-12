@@ -16,6 +16,16 @@ from PIL import Image
 from datetime import datetime
 import pytesseract
 
+import pandas as pd
+
+from django.http import HttpResponse
+
+from reportlab.platypus import SimpleDocTemplate, Table
+from reportlab.platypus.tables import TableStyle
+from reportlab.lib import colors
+
+from io import BytesIO
+
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # Create your views here.
 
@@ -239,81 +249,222 @@ def user_dashboard(request):
         'alerts': alerts,'anomaly_message': anomaly_message
     })
 
+
 @login_required
 def daily_expenses(request):
-    today=now().date()
-    expenses=Expense.objects.filter(user=request.user,date=today)
-    return render(request,'daily_expenses.html',{'expenses':expenses})
+
+    today = now().date()
+
+    expenses = Expense.objects.filter(
+        user=request.user,
+        date=today
+    ).order_by('-id')
+
+    total = sum(exp.amount for exp in expenses)
+
+    # ✅ Monthly budget
+    budget = Budget.objects.filter(
+    user=request.user,
+    month=today.month,
+    year=today.year
+).first()
+
+    daily_target = 0
+    daily_message = ""
+
+    if budget and budget.amount > 0:
+
+        import calendar
+
+        days_in_month = calendar.monthrange(
+            today.year,
+            today.month
+        )[1]
+
+        daily_target = round(
+            budget.amount / days_in_month,
+            2
+        )
+
+        if total > daily_target:
+
+            daily_message = (
+                "⚠️ Spending is higher than "
+                "your daily average target."
+            )
+
+        else:
+
+            daily_message = (
+                "✅ Spending looks normal today."
+            )
+
+    return render(
+        request,
+        'daily_expenses.html',
+        {
+            'expenses': expenses,
+            'total': total,
+            'daily_target': daily_target,
+            'daily_message': daily_message
+        }
+    )
 
 @login_required
 def weekly_expenses(request):
+
     today = now().date()
 
-    # ✅ FIX 1: Current WEEK (Monday → today)
+    # ✅ Current WEEK (Monday → today)
     start_of_week = today - timedelta(days=today.weekday())
 
     expenses = Expense.objects.filter(
         user=request.user,
         date__range=[start_of_week, today]
-    ).order_by('-date', '-id')  # latest first
+    ).order_by('-date', '-id')
 
-    # 👉 All expenses for anomaly detection
-    all_expenses = Expense.objects.filter(user=request.user)
+    # =====================================
+    # ✅ WEEKLY TOTAL
+    # =====================================
 
-    # 📊 Step 1: Group by (year, week)
+    weekly_total = sum(exp.amount for exp in expenses)
+
+    # =====================================
+    # ✅ MONTHLY BUDGET
+    # =====================================
+
+    budget = Budget.objects.filter(
+        user=request.user,
+        month=today.month,
+        year=today.year
+    ).first()
+
+    weekly_target = 0
+
+    weekly_status = ""
+
+    if budget and budget.amount > 0:
+
+        weekly_target = round(
+            budget.amount / 4,
+            2
+        )
+
+        if weekly_total > weekly_target:
+
+            weekly_status = (
+                "⚠️ Weekly spending is higher "
+                "than expected."
+            )
+
+        else:
+
+            weekly_status = (
+                "✅ Weekly spending looks normal."
+            )
+
+    # =====================================
+    # ✅ ANOMALY DETECTION
+    # =====================================
+
+    all_expenses = Expense.objects.filter(
+        user=request.user
+    )
+
     weekly_dict = {}
 
     for exp in all_expenses:
+
         year, week, _ = exp.date.isocalendar()
+
         key = (year, week)
 
         weekly_dict.setdefault(key, 0)
+
         weekly_dict[key] += exp.amount
 
     weekly_anomaly = None
 
-    # 📌 Step 2: Current week key
-    current_year, current_week_num, _ = today.isocalendar()
-    current_key = (current_year, current_week_num)
+    # ✅ Current week key
+    current_year, current_week_num, _ = (
+        today.isocalendar()
+    )
 
-    current_week_total = weekly_dict.get(current_key, 0)
+    current_key = (
+        current_year,
+        current_week_num
+    )
 
-    # 📌 Step 3: Past weeks only
+    current_week_total = weekly_total
+
+    # ✅ Past weeks only
     past_values = [
-        total for key, total in weekly_dict.items()
+
+        total
+
+        for key, total in weekly_dict.items()
+
         if key != current_key
     ]
 
-    # 📌 Step 4: Apply anomaly logic (MEDIAN ✔)
+    # ✅ MEDIAN anomaly logic
     if len(past_values) >= 2:
+
         median = np.median(past_values)
 
         if current_week_total > median * 1.2:
+
             weekly_anomaly = (
                 f"⚠️ High spending this week "
-                f"(₹{current_week_total}, median ₹{round(median, 2)})"
+                f"(Rs. {current_week_total}, "
+                f"median Rs. {round(median, 2)})"
             )
 
         elif current_week_total < median * 0.8:
+
             weekly_anomaly = (
                 f"📉 Low spending this week "
-                f"(₹{current_week_total}, median ₹{round(median, 2)})"
+                f"(Rs. {current_week_total}, "
+                f"median Rs. {round(median, 2)})"
             )
 
         else:
+
             weekly_anomaly = (
                 f"✅ Normal spending this week "
-                f"(₹{current_week_total})"
+                f"(Rs. {current_week_total})"
             )
 
-    # 📊 BONUS: weekly total for UI
-    weekly_total = sum(exp.amount for exp in expenses)
+    # =====================================
+    # ✅ TOP CATEGORY
+    # =====================================
 
-    return render(request, 'weekly_expenses.html', {
-        'expenses': expenses,
-        'weekly_anomaly': weekly_anomaly,
-        'weekly_total': weekly_total
-    })
+    top_category = expenses.values(
+        'category'
+    ).annotate(
+        total=Sum('amount')
+    ).order_by('-total').first()
+
+    return render(
+        request,
+        'weekly_expenses.html',
+        {
+
+            'expenses': expenses,
+
+            'weekly_total': weekly_total,
+
+            'weekly_target': weekly_target,
+
+            'weekly_status': weekly_status,
+
+            'weekly_anomaly': weekly_anomaly,
+
+            'top_category': top_category
+        }
+    )
+
+
 @login_required
 def monthly_expenses(request):
     today = now().date()
@@ -762,3 +913,184 @@ def scan_receipt(request):
         'form': form,
         'data': extracted_data
     })
+
+@login_required
+def export_excel(request):
+
+    expenses = Expense.objects.filter(user=request.user)
+
+    data = []
+
+    total = 0
+
+    for exp in expenses:
+
+        total += exp.amount
+
+        data.append({
+            'Amount': exp.amount,
+            'Category': exp.category,
+            'Date': exp.date,
+            'Description': exp.description,
+        })
+
+    df = pd.DataFrame(data)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+    response['Content-Disposition'] = (
+        'attachment; filename=expense_report.xlsx'
+    )
+
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+
+        # ✅ Main expense table
+        df.to_excel(
+            writer,
+            sheet_name='Expenses',
+            startrow=5,
+            index=False
+        )
+
+        workbook = writer.book
+        worksheet = writer.sheets['Expenses']
+
+        # ✅ Report heading
+        worksheet['A1'] = 'Smart Expense Tracker Report'
+
+        # ✅ User info
+        worksheet['A2'] = f'User: {request.user.username}'
+
+        # ✅ Total
+        worksheet['A3'] = f'Total Expenses: ₹{round(total, 2)}'
+
+        # ✅ Number of entries
+        worksheet['A4'] = f'Total Entries: {expenses.count()}'
+
+    return response
+
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Table,
+    TableStyle,
+    Paragraph,
+    Spacer
+)
+
+from reportlab.lib.styles import getSampleStyleSheet
+
+from reportlab.lib import colors
+
+from io import BytesIO
+
+from django.http import HttpResponse
+
+from django.contrib.auth.decorators import login_required
+
+from django.utils.timezone import now
+
+
+@login_required
+def export_pdf(request):
+
+    expenses = Expense.objects.filter(user=request.user)
+
+    total = sum(exp.amount for exp in expenses)
+
+    buffer = BytesIO()
+
+    pdf = SimpleDocTemplate(buffer)
+
+    elements = []
+
+    styles = getSampleStyleSheet()
+
+    # ✅ TITLE
+    title = Paragraph(
+        "<b>Smart Expense Tracker Report</b>",
+        styles['Title']
+    )
+
+    elements.append(title)
+
+    elements.append(Spacer(1, 12))
+
+    # ✅ USER DETAILS
+    user_info = Paragraph(
+        f"""
+        <b>User:</b> {request.user.username}<br/>
+        <b>Generated On:</b> {now().strftime('%d/%m/%Y')}<br/>
+        <b>Total Entries:</b> {expenses.count()}<br/>
+        <b>Total Expense:</b> Rs.{round(total, 2)}
+        """,
+        styles['BodyText']
+    )
+
+    elements.append(user_info)
+
+    elements.append(Spacer(1, 20))
+
+    # ✅ TABLE DATA
+    data = [
+        ['Amount', 'Category', 'Date', 'Description']
+    ]
+
+    for exp in expenses:
+
+        data.append([
+            str(exp.amount),
+            exp.category,
+            str(exp.date),
+            exp.description
+        ])
+
+    # ✅ TOTAL ROW
+    data.append([
+        '',
+        '',
+        'TOTAL',
+        f'Rs.{round(total, 2)}'
+    ])
+
+    # ✅ CREATE TABLE
+    table = Table(data)
+
+    # ✅ TABLE STYLE
+    style = TableStyle([
+
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+
+        # ✅ TOTAL ROW STYLE
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+
+    ])
+
+    table.setStyle(style)
+
+    elements.append(table)
+
+    # ✅ BUILD PDF
+    pdf.build(elements)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/pdf'
+    )
+
+    response['Content-Disposition'] = (
+        'attachment; filename=expense_report.pdf'
+    )
+
+    return response

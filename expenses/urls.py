@@ -20,5 +20,7 @@ urlpatterns = [
     path('delete_expense/<int:id>/', views.delete_expense, name='delete_expense'),
     path('edit_expense/<int:id>/', views.edit_expense, name='edit_expense'),
     path('scan_receipt/', views.scan_receipt, name='scan_receipt'),
+    path('export_excel/', views.export_excel, name='export_excel'),
+    path('export_pdf/', views.export_pdf, name='export_pdf'),
 
 ]
