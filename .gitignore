@@ -6,3 +6,4 @@ venv/
 .env/
 media/
 staticfiles/
+node_modules/

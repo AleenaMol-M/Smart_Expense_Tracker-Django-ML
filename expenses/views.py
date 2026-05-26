@@ -29,6 +29,9 @@ from io import BytesIO
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 # Create your views here.
 
+def dashboard(request):
+    return render(request, 'dashboard.html')
+
 @login_required
 def expense_list(request):
     expenses = Expense.objects.filter(user=request.user).order_by('-date', '-id')
