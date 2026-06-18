@@ -15,7 +15,8 @@ import re
 from PIL import Image
 from datetime import datetime
 import pytesseract
-
+from django.db.models import Sum
+import json
 import pandas as pd
 
 from django.http import HttpResponse
@@ -124,51 +125,61 @@ def signup(request):
 def home(request):
     return render(request, 'home.html')
 
+import json
+import numpy as np
+import pandas as pd
+
+from django.shortcuts import render
+from django.db.models import Sum
+from django.utils.timezone import now
+
+from .models import Expense, Budget
+from sklearn.ensemble import RandomForestRegressor
+
 @login_required
 def user_dashboard(request):
-    expenses = Expense.objects.filter(user=request.user)
+
+    user = request.user
+    expenses = Expense.objects.filter(user=user)
 
     category_predictions = {}
     total_prediction = 0
     alerts = []
 
-    # 🔹 Get current month budget
+    # -------------------------------
+    # 1. BUDGET LOGIC
+    # -------------------------------
     today = now()
 
     budget_obj = Budget.objects.filter(
-        user=request.user,
+        user=user,
         month=today.month,
         year=today.year
     ).first()
 
-    # 🔹 If no budget → use last month's budget
     if not budget_obj:
-        last_budget = Budget.objects.filter(user=request.user).order_by('-year', '-month').first()
-        budget = last_budget.amount if last_budget else None
+        last_budget = Budget.objects.filter(user=user).order_by('-year', '-month').first()
+        budget = last_budget.amount if last_budget else 0
     else:
         budget = budget_obj.amount
 
-    # 🔹 ML Prediction
+    # -------------------------------
+    # 2. ML PREDICTION
+    # -------------------------------
     if expenses.exists():
+
         categories = expenses.values_list('category', flat=True).distinct()
 
         for cat in categories:
             cat_expenses = expenses.filter(category=cat)
 
-            data = []
-            for exp in cat_expenses:
-                data.append({
-                    'date': exp.date,
-                    'amount': exp.amount
-                })
-
+            data = list(cat_expenses.values('date', 'amount'))
             df = pd.DataFrame(data)
 
             if df.empty:
                 continue
 
             df['date'] = pd.to_datetime(df['date'])
-
             df_daily = df.groupby('date')['amount'].sum().reset_index()
 
             if len(df_daily) < 2:
@@ -188,18 +199,15 @@ def user_dashboard(request):
 
                 future_date = df_daily['date'].max() + pd.Timedelta(days=1)
 
-                future_input = {
+                future_input = pd.DataFrame([{
                     'days': df_daily['days'].max() + 1,
                     'month': future_date.month,
                     'day_of_week': future_date.dayofweek,
                     'week': int(future_date.isocalendar().week)
-                }
+                }])
 
-                future_df = pd.DataFrame([future_input])
+                daily_pred = model.predict(future_input)[0]
 
-                daily_pred = model.predict(future_df)[0]
-
-                # 🔥 spending frequency adjustment
                 active_days = len(df_daily)
                 total_days = (df_daily['date'].max() - df_daily['date'].min()).days + 1
 
@@ -208,51 +216,65 @@ def user_dashboard(request):
 
                 monthly_pred = daily_pred * expected_days
 
-                # 🔒 prevent extreme values
-                monthly_pred = min(monthly_pred, df_daily['amount'].sum() * 1.5)
+                monthly_pred = min(
+                    monthly_pred,
+                    df_daily['amount'].sum() * 1.5
+                )
 
             category_predictions[cat] = round(monthly_pred, 2)
 
         total_prediction = sum(category_predictions.values())
 
-    # 🔹 Alerts logic
+    # -------------------------------
+    # 3. ALERTS
+    # -------------------------------
     if budget:
         if total_prediction > budget:
             alerts.append("⚠️ You may exceed your budget this month")
-
         elif total_prediction > 0.8 * budget:
             alerts.append("⚠️ You are close to your budget limit")
-    # 🔥 ANOMALY DETECTION
+
+    # -------------------------------
+    # 4. ANOMALY DETECTION
+    # -------------------------------
     anomaly_message = None
+    today_date = now().date()
 
-    today = now().date()
+    today_spend = expenses.filter(date=today_date).aggregate(
+        total=Sum('amount')
+    )['total'] or 0
 
-# today's total spending
-    today_spend = expenses.filter(date=today).aggregate(Sum('amount'))['amount__sum'] or 0
-
-# daily totals (past data)
     daily_data = expenses.values('date').annotate(total=Sum('amount'))
+    daily_amounts = [d['total'] for d in daily_data if d['date'] != today_date]
 
-    daily_amounts = [item['total'] for item in daily_data if item['date'] != today]
-
-# need enough data
     if len(daily_amounts) >= 5:
-        import numpy as np
-
         avg = np.mean(daily_amounts)
         std = np.std(daily_amounts)
 
-    # anomaly condition
         if std > 0 and today_spend > avg + 2 * std:
-            anomaly_message = f"⚠️ Unusual spending today! ₹{today_spend} (usual ₹{round(avg,2)})"
-    return render(request, 'user_dashboard.html', {
-        'category_predictions': category_predictions,
-        'total_prediction': round(total_prediction, 2),
-        'budget': budget,
-        'alerts': alerts,'anomaly_message': anomaly_message
-    })
+            anomaly_message = (
+                f"⚠️ Unusual spending today! ₹{today_spend} "
+                f"(usual ₹{round(avg,2)})"
+            )
 
 
+    # -------------------------------
+    # 5. RECENT EXPENSES
+    # -------------------------------
+    recent_expenses = expenses.order_by('-date')[:5]
+    # -------------------------------
+    # 6. CONTEXT
+    # -------------------------------
+    context = {
+    "category_predictions": category_predictions,
+    "total_prediction": round(total_prediction, 2),
+    "budget": budget,
+    "alerts": alerts,
+    "anomaly_message": anomaly_message,
+    "recent_expenses": recent_expenses,
+}
+
+    return render(request, "user_dashboard.html", context)
 @login_required
 def daily_expenses(request):
 
