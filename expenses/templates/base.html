@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Expense Tracker</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+
+    <!-- Header -->
+    <header class="bg-purple-600 text-white shadow">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold">
+                Smart Expense Tracker
+            </h1>
+
+            <a href="{% url 'logout' %}"
+               class="bg-white text-purple-600 px-4 py-2 rounded-lg font-medium">
+                Logout
+            </a>
+        </div>
+    </header>
+
+    <div class="flex">
+
+        <!-- Sidebar -->
+        <aside class="w-64 min-h-screen bg-white shadow">
+
+            <div class="p-6">
+
+                <ul class="space-y-4">
+
+                    <li>
+                        <a href="{% url 'user_dashboard' %}"
+                           class="block p-3 rounded-lg hover:bg-purple-100">
+                            📊 Dashboard
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'add_expense' %}"
+                           class="block p-3 rounded-lg hover:bg-purple-100">
+                            ➕ Add Expense
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'expense_list' %}"
+                           class="block p-3 rounded-lg hover:bg-purple-100">
+                            💸 Expenses
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'set_budget' %}"
+                           class="block p-3 rounded-lg hover:bg-purple-100">
+                            🎯 Budget
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="{% url 'scan_receipt' %}"
+                           class="block p-3 rounded-lg hover:bg-purple-100">
+                            🧾 Scan Receipt
+                        </a>
+                    </li>
+
+                </ul>
+
+            </div>
+
+        </aside>
+
+        <!-- Page Content -->
+        <main class="flex-1 p-8">
+
+            {% block content %}
+            {% endblock %}
+
+        </main>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t text-center py-4">
+        Smart Expense Tracker © 2026
+    </footer>
+
+</body>
+</html>
