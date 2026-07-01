@@ -1,18 +1,127 @@
-<html>
-    <head><title>SignUp</title>
-    <link
-href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-rel="stylesheet"></head>
-    <body>
-        <div class="container mt-4"
-        <form method="POST">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">Register</button>
-        </form>
-        <p>Already have an account?
-            <a href="{% url 'login' %}">Login</a>
-        </p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up | Smart Expense Tracker</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+    input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        outline: none;
+    }
+
+    input:focus {
+        border-color: #9333ea;
+        box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.15);
+    }
+
+    ul {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+    }
+</style>
+</head>
+
+<body class="bg-gradient-to-br from-purple-100 via-white to-purple-50 min-h-screen flex items-center justify-center">
+
+    <div class="w-full max-w-md">
+
+        <!-- Logo / Title -->
+        <div class="text-center mb-8">
+
+            <div class="w-16 h-16 mx-auto bg-purple-600 rounded-full flex items-center justify-center text-white text-3xl shadow-lg">
+                💰
+            </div>
+
+            <h1 class="mt-4 text-3xl font-bold text-gray-900">
+                Smart Expense Tracker
+            </h1>
+
+            <p class="mt-2 text-gray-500">
+                Create your account and start managing your expenses smarter.
+            </p>
+
+        </div>
+
+        <!-- Signup Card -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+
+            <form method="POST" class="space-y-5">
+    {% csrf_token %}
+
+    <div>
+        <label class="block mb-2 font-medium text-gray-700">Username</label>
+        {{ form.username }}
+        <div class="text-red-500 text-sm mt-1">{{ form.username.errors }}</div>
     </div>
-    </body>
+
+    <div>
+        <label class="block mb-2 font-medium text-gray-700">Password</label>
+        {{ form.password1 }}
+
+        <p id="passwordHint" class="hidden text-sm text-gray-500 mt-2">
+            Password must be at least 8 characters and should not be too common.
+        </p>
+
+        <div class="text-red-500 text-sm mt-1">{{ form.password1.errors }}</div>
+    </div>
+
+    <div>
+        <label class="block mb-2 font-medium text-gray-700">Confirm Password</label>
+        {{ form.password2 }}
+        <div class="text-red-500 text-sm mt-1">{{ form.password2.errors }}</div>
+    </div>
+
+    <button
+        type="submit"
+        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition duration-300 shadow-md">
+        Create Account
+    </button>
+</form>
+
+<script>
+    const passwordInput = document.getElementById("id_password1");
+    const passwordHint = document.getElementById("passwordHint");
+
+    passwordInput.addEventListener("focus", function () {
+        passwordHint.classList.remove("hidden");
+    });
+
+    passwordInput.addEventListener("input", function () {
+        if (passwordInput.value.length >= 8) {
+            passwordHint.classList.add("hidden");
+        } else {
+            passwordHint.classList.remove("hidden");
+        }
+    });
+</script>
+            <div class="mt-6 text-center">
+
+                <p class="text-gray-500">
+                    Already have an account?
+                </p>
+
+                <a href="{% url 'login' %}"
+                   class="text-purple-600 font-semibold hover:text-purple-800">
+                    Login Here
+                </a>
+
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <p class="text-center text-gray-500 text-sm mt-6">
+            © 2026 Smart Expense Tracker
+        </p>
+
+    </div>
+
+</body>
 </html>

@@ -78,10 +78,7 @@ rel="stylesheet">
 <div class="top-bar">
     <h2>💰 My Expenses</h2>
 
-    <form method="POST" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <button type="submit">Logout</button>
-    </form>
+    
 </div>
 
 <a href="{% url 'add_expense' %}" class="button" >➕ Add Expense</a>
